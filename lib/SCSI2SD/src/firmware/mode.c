@@ -384,10 +384,19 @@ static void doModeSense(
 		// Number of blocks
 		// Zero == all remaining blocks shall have the medium
 		// characteristics specified.
-		scsiDev.data[idx++] = 0;
-		scsiDev.data[idx++] = 0;
-		scsiDev.data[idx++] = 0;
-
+		uint32_t blocks = scsiDev.target->cfg->scsiSectors;
+		if (blocks < 0xFFFFFF)
+		{
+			scsiDev.data[idx++] = (blocks >> 16) & 0xFF;
+			scsiDev.data[idx++] = (blocks >> 8) & 0xFF;
+			scsiDev.data[idx++] = blocks & 0xFF;
+		}
+		else
+		{
+			scsiDev.data[idx++] = 0;
+			scsiDev.data[idx++] = 0;
+			scsiDev.data[idx++] = 0;
+		}
 		scsiDev.data[idx++] = 0; // reserved
 
 		// Block length
@@ -414,7 +423,7 @@ static void doModeSense(
 		}
 	}
 
-	if (pageCode == 0x02 || pageCode == 0x3F)
+	if (0) //if (pageCode == 0x02 || pageCode == 0x3F)
 	{
 		pageFound = 1;
 		if ((scsiDev.compatMode >= COMPAT_SCSI2))
@@ -436,6 +445,9 @@ static void doModeSense(
 		pageIn(pc, idx, FormatDevicePage, sizeof(FormatDevicePage));
 		if (pc != 0x01)
 		{
+			scsiDev.data[idx+2] = 0x00;
+			scsiDev.data[idx+3] = scsiDev.target->cfg->headsPerCylinder;
+
 			uint16_t sectorsPerTrack = scsiDev.target->cfg->sectorsPerTrack;
 			scsiDev.data[idx+10] = sectorsPerTrack >> 8;
 			scsiDev.data[idx+11] = sectorsPerTrack & 0xFF;
@@ -451,6 +463,8 @@ static void doModeSense(
 			scsiDev.data[idx+12] = 0xFF;
 			scsiDev.data[idx+13] = 0xFF;
 		}
+		//no interleave
+		scsiDev.data[idx+15] = 0x00;
 
 		idx += sizeof(FormatDevicePage);
 	}
@@ -583,7 +597,7 @@ static void doModeSense(
 	}
 
 	// SCSI 2 standard says page 0 is always last.
-	if (pageCode == 0x00 || pageCode == 0x3F)
+	if (0) // (pageCode == 0x00 || pageCode == 0x3F)
 	{
 		pageFound = 1;
 		pageIn(pc, idx, OperatingPage, sizeof(OperatingPage));
