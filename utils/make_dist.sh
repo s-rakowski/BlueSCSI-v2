@@ -23,7 +23,7 @@
 #
 # Produces:
 #   BlueSCSI_v<ver>_<hash>.zip              - Universal firmware zip for SD card update
-#   BlueSCSI_V2_DaynaPORT_<date>_<hash>.uf2 - Combined Pico+Pico2 DaynaPORT UF2
+#   BlueSCSI_V2_Universal_<date>_<hash>.uf2 - Combined Pico+Pico2 DaynaPORT UF2
 #   BlueSCSI_V2_Audio_SPDIF_<date>_<hash>.uf2 - Combined Pico+Pico2 Audio SPDIF UF2
 #   BlueSCSI_Ultra_<date>_<hash>.uf2        - Ultra UF2
 #   BlueSCSI_Ultra_Wide_<date>_<hash>.uf2   - Ultra Wide UF2
@@ -36,7 +36,7 @@ cd "$SCRIPT_DIR/.." || exit 1
 OUT_DIR=./dist
 mkdir -p "$OUT_DIR"
 
-DATE=$(date +%Y-%m-%d)
+DATE=$(TZ=America/Chicago date +%Y-%m-%d)
 VERSION=$(git rev-parse --short=7 HEAD)
 
 # --- Copy firmware zip (for SD card update) ---
@@ -66,17 +66,53 @@ done
 ls -1 "$OUT_DIR"
 
 # --- Dev archive: ELF + UF2 for debugging ---
-zip -j "$OUT_DIR/dev-BlueSCSI_${DATE}_${VERSION}.zip" "$OUT_DIR"/*.elf "$OUT_DIR"/*.uf2
+# README explains what this archive is for so end users who grabbed it by
+# mistake know to fetch the SD-card .zip or a UF2 instead.
+DEV_README="$OUT_DIR/DEVELOPER BUILD ARTIFACTS.txt"
+cat > "$DEV_README" <<'EOF'
+BlueSCSI Developer Build Artifacts
+==================================
+
+This ZIP contains developer and debugging artifacts for a BlueSCSI
+release:
+
+  - *.elf   Firmware with debug symbols (GDB, addr2line, crash analysis)
+  - *.uf2   Flashable firmware images (one per build target)
+
+If you're a regular BlueSCSI user, you do NOT need this file. Use one
+of these from the release page instead:
+
+  BlueSCSI_v<version>_<hash>.zip  SD card updater (recommended)
+  BlueSCSI_V2_Universal_*.uf2     USB/BOOTSEL flashing, V2 DaynaPORT
+  BlueSCSI_V2_Audio_SPDIF_*.uf2   USB/BOOTSEL flashing, V2 SPDIF
+  BlueSCSI_Ultra_*.uf2            USB/BOOTSEL flashing, Ultra
+  BlueSCSI_Ultra_Wide_*.uf2       USB/BOOTSEL flashing, Ultra Wide
+
+End-user update guide:
+
+  https://github.com/BlueSCSI/BlueSCSI-v2/wiki/Updating-Firmware
+
+Typical uses for this developer archive:
+
+  - Post-mortem crash analysis (addr2line / utils/analyze_crashlog.sh
+    against the exact release)
+  - Binary comparisons between releases
+  - GDB debugging with a CMSIS-DAP probe
+EOF
+
+zip -j "$OUT_DIR/dev-BlueSCSI_${DATE}_${VERSION}.zip" "$OUT_DIR"/*.elf "$OUT_DIR"/*.uf2 "$DEV_README"
 rm "$OUT_DIR/"*.elf
+rm "$DEV_README"
 
 # --- Combined V2 UF2s: merge Pico + Pico 2 variants for the BlueSCSI V2 board ---
 # UF2 format allows combining RP2040 and RP2350 images — the bootrom ignores
 # blocks for the wrong chip, so one file works on either.
 combine_v2_uf2() {
     local variant="$1"
+    local out_basename="${2:-BlueSCSI_V2_${variant}}"
     local pico1="$OUT_DIR/BlueSCSI_Pico_${variant}_${DATE}_${VERSION}.uf2"
     local pico2="$OUT_DIR/BlueSCSI_Pico_2_${variant}_${DATE}_${VERSION}.uf2"
-    local combined="$OUT_DIR/BlueSCSI_V2_${variant}_${DATE}_${VERSION}.uf2"
+    local combined="$OUT_DIR/${out_basename}_${DATE}_${VERSION}.uf2"
 
     if [ -f "$pico1" ] && [ -f "$pico2" ]; then
         cat "$pico1" "$pico2" > "$combined"
@@ -85,7 +121,7 @@ combine_v2_uf2() {
     fi
 }
 
-combine_v2_uf2 "DaynaPORT"
+combine_v2_uf2 "DaynaPORT" "BlueSCSI_V2_Universal"
 combine_v2_uf2 "Audio_SPDIF"
 
 echo ""

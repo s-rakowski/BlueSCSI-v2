@@ -119,6 +119,18 @@ static bool hasExtension(const char *filename, const char *ext)
 bool testHasExtension(const char *filename, const char *ext) { return hasExtension(filename, ext); }
 #endif
 
+// Encode a SCSI ID (0..15) as a single filename character: '0'..'9' or 'A'..'F'.
+// Wide-bus image filenames (HD00_imaged, CD00_imaged, etc.) place the target
+// ID in one character; for IDs >= 10 we need hex rather than overflowing past '9'.
+char scsiEncodeID(uint8_t scsi_id)
+{
+    if (scsi_id <= 9)
+        return '0' + scsi_id;
+    if (scsi_id >= 0xA && scsi_id <= 0xF)
+        return 'A' + (scsi_id - 0xA);
+    return '\0';
+}
+
 /************************************************/
 /* ROM drive support (in microcontroller flash) */
 /************************************************/
@@ -1954,7 +1966,9 @@ void scsiDiskStartWrite(uint32_t lba, uint32_t blocks)
     {
         logmsg("WARNING: Host attempted write to read-only drive ID ", (int)img.getTargetId());
         scsiDev.status = CHECK_CONDITION;
-        scsiDev.target->sense.code = ILLEGAL_REQUEST;
+        // SCSI-2 §9.1.12: WRITE PROTECTED (ASC 0x2700) pairs with sense key
+        // DATA PROTECT (0x07), not ILLEGAL REQUEST.
+        scsiDev.target->sense.code = DATA_PROTECT;
         scsiDev.target->sense.asc = WRITE_PROTECTED;
         scsiDev.phase = STATUS;
     }
@@ -2082,7 +2096,8 @@ static void scsiDiskStartWriteAndVerify(uint32_t lba, uint32_t blocks)
     {
         logmsg("WARNING: Host attempted WRITE AND VERIFY to read-only drive ID ", (int)img.getTargetId());
         scsiDev.status = CHECK_CONDITION;
-        scsiDev.target->sense.code = ILLEGAL_REQUEST;
+        // SCSI-2 §9.1.12: WRITE PROTECTED pairs with sense key DATA PROTECT.
+        scsiDev.target->sense.code = DATA_PROTECT;
         scsiDev.target->sense.asc = WRITE_PROTECTED;
         scsiDev.phase = STATUS;
     }
